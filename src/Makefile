@@ -8,10 +8,10 @@ SOURCES=$(wildcard *.c)
 OBJECTS=$(SOURCES:.c=.o)
 
 all: $(OBJECTS)
-	$(CC) $(OBJECTS) -o main.out $(LDFLAGS)
+	$(CC) -g $(OBJECTS) -o main.out $(LDFLAGS)
 
 .c.o:
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) -g $(CFLAGS) $< -o $@
 
 clean:
-	rm -f src/*.o main.out
+	rm -f ./*.o main.out

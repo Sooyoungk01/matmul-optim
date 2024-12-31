@@ -96,6 +96,33 @@ int main(int argc, char *argv[]) {
     }
     printf("  > Average elapsed time: %f (ms)\n\n", elapsed_time / repeat_performance * 1000);
 
+
+
+   // NAIVE
+    printf("NAIVE:\n");
+    double elapsed_time_naive = 0;
+
+    // warm up
+    sgemm_naive(M, K, N, 1.0, A, B, 0.0, C);
+
+    // measure
+    for (int i = 0; i < repeat_performance; ++i) {
+        init_rand(A, M * N);
+        init_rand(B, N * K);
+        init_zero(C, M * K);
+
+        const double t0 = clock();
+        sgemm_naive(M, K, N, 1.0, A, B, 0.0, C);
+        const double t1 = clock();
+
+        elapsed_time_naive += (t1 - t0) / CLOCKS_PER_SEC;
+
+        printf("  (%02d) Elapsed time: %f (ms)\n", i, (t1 - t0) / CLOCKS_PER_SEC * 1000);
+    }
+    printf("  > Average elapsed time: %f (ms)\n\n", elapsed_time_naive / repeat_performance * 1000);
+
+
+
     printf("Speedup: %f\n\n", elapsed_time_ref / elapsed_time);
     if (elapsed_time / repeat_performance < elapsed_time_ref / repeat_performance) {
         printf("Congratulations! Custom implementation is faster than OpenBLAS.\n");

@@ -1,4 +1,5 @@
 #include "matmul.h"
+#include "sgemm_custom.h"
 
 void sgemm_openblas(int m, int n, int k, float alpha, float *A, float *B, float beta, float *C) {
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, alpha, A, k, B, n, beta, C, n);
@@ -20,7 +21,6 @@ void sgemm_naive(int m, int n, int k, float alpha, float *A, float *B, float bet
 // TODO: add your custom sgemm functions!
 
 
-
 void sgemm(int m, int n, int k, float alpha, float *A, float *B, float beta, float *C) {
-    sgemm_naive(m, n, k, alpha, A, B, beta, C); // TODO: replace this with your implementation!
+    sgemm_custom(m, n, k, alpha, A, B, beta, C); // TODO: replace this with your implementation!
 }
