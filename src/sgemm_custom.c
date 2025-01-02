@@ -57,8 +57,8 @@ void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float 
 
     float32x4_t ab_0, ab_1, ab_2, ab_3;
 
-    float32x4_t a;
-    float32x4_t b_0, b_1, b_2, b_3;
+    float32x4_t a_0, a_1, a_2, a_3;
+    float32x4_t b;
     float32x4_t tmp;
 
     int i, j, k;
@@ -68,13 +68,154 @@ void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float 
     ab_2 = vdupq_n_f32(0.0f);
     ab_3 = vdupq_n_f32(0.0f);
     
-    for(k=0; k<KC; k++){
-        for(i=0; i<MR; i++){
-            for(j=0; j<NR; j++){
-                AB[i*NR+j] += A[i+k*MR] * B[j+k*NR];
-            }
-        }
+
+    for (k=0; k<KC/4; k++){
+        //1
+        a_0 = vld1q_dup_f32(A);
+        a_1 = vld1q_dup_f32(A+1);
+        a_2 = vld1q_dup_f32(A+2);
+        a_3 = vld1q_dup_f32(A+3);
+
+        b = vld1q_f32(B);
+
+        tmp = b;
+
+        tmp = vmulq_f32(tmp, a_0);
+        ab_0 = vaddq_f32(tmp, ab_0);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_1);
+        ab_1 = vaddq_f32(tmp, ab_1);
+        
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_2);
+        ab_2 = vaddq_f32(tmp, ab_2);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_3);
+        ab_3 = vaddq_f32(tmp, ab_3);
+
+        A += 4;
+        B += 4;
+
+        //2
+        a_0 = vld1q_dup_f32(A);
+        a_1 = vld1q_dup_f32(A+1);
+        a_2 = vld1q_dup_f32(A+2);
+        a_3 = vld1q_dup_f32(A+3);
+
+        b = vld1q_f32(B);
+
+        tmp = b;
+
+        tmp = vmulq_f32(tmp, a_0);
+        ab_0 = vaddq_f32(tmp, ab_0);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_1);
+        ab_1 = vaddq_f32(tmp, ab_1);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_2);
+        ab_2 = vaddq_f32(tmp, ab_2);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_3);
+        ab_3 = vaddq_f32(tmp, ab_3);
+
+        A += 4;
+        B += 4;
+
+        //3
+        a_0 = vld1q_dup_f32(A);
+        a_1 = vld1q_dup_f32(A+1);
+        a_2 = vld1q_dup_f32(A+2);
+        a_3 = vld1q_dup_f32(A+3);
+
+        b = vld1q_f32(B);
+
+        tmp = b;
+
+        tmp = vmulq_f32(tmp, a_0);
+        ab_0 = vaddq_f32(tmp, ab_0);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_1);
+        ab_1 = vaddq_f32(tmp, ab_1);
+        
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_2);
+        ab_2 = vaddq_f32(tmp, ab_2);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_3);
+        ab_3 = vaddq_f32(tmp, ab_3);
+
+        A += 4;
+        B += 4;
+
+        //4
+        a_0 = vld1q_dup_f32(A);
+        a_1 = vld1q_dup_f32(A+1);
+        a_2 = vld1q_dup_f32(A+2);
+        a_3 = vld1q_dup_f32(A+3);
+
+        b = vld1q_f32(B);
+
+        tmp = b;
+
+        tmp = vmulq_f32(tmp, a_0);
+        ab_0 = vaddq_f32(tmp, ab_0);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_1);
+        ab_1 = vaddq_f32(tmp, ab_1);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_2);
+        ab_2 = vaddq_f32(tmp, ab_2);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_3);
+        ab_3 = vaddq_f32(tmp, ab_3);
+
+        A += 4;
+        B += 4;
     }
+
+    for (k=0; k<KC%4; k++){
+        a_0 = vld1q_dup_f32(A);
+        a_1 = vld1q_dup_f32(A+1);
+        a_2 = vld1q_dup_f32(A+2);
+        a_3 = vld1q_dup_f32(A+3);
+
+        b = vld1q_f32(B);
+
+        tmp = b;
+
+        tmp = vmulq_f32(tmp, a_0);
+        ab_0 = vaddq_f32(tmp, ab_0);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_1);
+        ab_1 = vaddq_f32(tmp, ab_1);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_2);
+        ab_2 = vaddq_f32(tmp, ab_2);
+
+        tmp = b;
+        tmp = vmulq_f32(tmp, a_3);
+        ab_3 = vaddq_f32(tmp, ab_3);
+
+        A += 4;
+        B += 4;
+    }
+
+    vst1q_f32(AB, ab_0);
+    vst1q_f32(AB+4, ab_1);
+    vst1q_f32(AB+8, ab_2);
+    vst1q_f32(AB+12, ab_3);
 
     if(beta == 1){
         for(i=0; i<MR; i++){
