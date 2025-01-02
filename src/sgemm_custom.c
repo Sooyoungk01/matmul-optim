@@ -1,4 +1,5 @@
 #include <arm_neon.h>
+#include <stdio.h>
 
 #define MC 256
 #define NC 256
@@ -8,8 +9,8 @@
 #define NR 4
 
 /* buffer */
-float _A[MC*KC] __attribute__ ((aligned (16)));
-float _B[KC*NC] __attribute__ ((aligned (16)));
+float _A[MC*KC] __attribute__ ((aligned (8)));
+float _B[KC*NC] __attribute__ ((aligned (8)));
 
 
 void pack_MRxKC(int incRowA, int incColA, float* A, float* _A){
@@ -53,169 +54,83 @@ void pack_B(int incRowB, int incColB, float* B, float* _B){
 
 void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float alpha, float beta){
 
-    float AB[MR*NR] __attribute__ ((aligned (16))) = {0};
-
-    float32x4_t ab_0, ab_1, ab_2, ab_3;
-
-    float32x4_t a_0, a_1, a_2, a_3;
-    float32x4_t b;
-    float32x4_t tmp;
-
+    float AB[MR*NR] __attribute__ ((aligned (8))) = {0};
     int i, j, k;
 
-    ab_0 = vdupq_n_f32(0.0f);
-    ab_1 = vdupq_n_f32(0.0f);
-    ab_2 = vdupq_n_f32(0.0f);
-    ab_3 = vdupq_n_f32(0.0f);
+    float32x2_t ab_00_11, ab_01_10, ab_02_13, ab_03_12, ab_20_31, ab_21_30, ab_22_33, ab_23_32;
+    float32x2_t btmp0, btmp1, atmp0, atmp1;
+    float32x2_t atmp0_r, atmp1_r, temp;
+
+    btmp0 = vld1_f32(B);
+    btmp1 = vld1_f32(B+2);
+    atmp0 = vld1_f32(A);
+
+    ab_00_11 = vdup_n_f32(0.0f);
+    ab_01_10 = vdup_n_f32(0.0f);
+    ab_02_13 = vdup_n_f32(0.0f);
+    ab_03_12 = vdup_n_f32(0.0f);    
+    ab_20_31 = vdup_n_f32(0.0f);
+    ab_21_30 = vdup_n_f32(0.0f);
+    ab_22_33 = vdup_n_f32(0.0f);
+    ab_23_32 = vdup_n_f32(0.0f);
     
 
-    for (k=0; k<KC/4; k++){
-        //1
-        a_0 = vld1q_dup_f32(A);
-        a_1 = vld1q_dup_f32(A+1);
-        a_2 = vld1q_dup_f32(A+2);
-        a_3 = vld1q_dup_f32(A+3);
+    for (k=0; k<KC; k++){
+        atmp1 = vld1_f32(A+2);
 
-        b = vld1q_f32(B);
+        atmp0_r = vrev64_f32(atmp0);
+        atmp1_r = vrev64_f32(atmp1);
 
-        tmp = b;
+        temp = atmp0;
+        atmp0 = vmul_f32(atmp0, btmp0);
+        temp = vmul_f32(temp, btmp1);
+        ab_00_11 = vadd_f32(ab_00_11, atmp0);
+        ab_02_13 = vadd_f32(ab_02_13, temp);
 
-        tmp = vmulq_f32(tmp, a_0);
-        ab_0 = vaddq_f32(tmp, ab_0);
+        temp = atmp0_r;
+        atmp0_r = vmul_f32(atmp0_r, btmp0);
+        temp = vmul_f32(temp, btmp1);
+        ab_01_10 = vadd_f32(ab_01_10, atmp0_r);
+        ab_03_12 = vadd_f32(ab_03_12, temp);
 
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_1);
-        ab_1 = vaddq_f32(tmp, ab_1);
-        
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_2);
-        ab_2 = vaddq_f32(tmp, ab_2);
+        atmp0 = vld1_f32(A+4); // load in advance
 
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_3);
-        ab_3 = vaddq_f32(tmp, ab_3);
+        temp = atmp1;
+        atmp1 = vmul_f32(atmp1, btmp0);
+        temp = vmul_f32(temp, btmp1);
+        ab_20_31 = vadd_f32(ab_20_31, atmp1);
+        ab_22_33 = vadd_f32(ab_22_33, temp);
 
-        A += 4;
-        B += 4;
+        temp = atmp1_r;
+        atmp1_r = vmul_f32(atmp1_r, btmp0);
+        temp = vmul_f32(temp, btmp1);
+        ab_21_30 = vadd_f32(ab_21_30, atmp1_r);
+        ab_23_32 = vadd_f32(ab_23_32, temp);
 
-        //2
-        a_0 = vld1q_dup_f32(A);
-        a_1 = vld1q_dup_f32(A+1);
-        a_2 = vld1q_dup_f32(A+2);
-        a_3 = vld1q_dup_f32(A+3);
-
-        b = vld1q_f32(B);
-
-        tmp = b;
-
-        tmp = vmulq_f32(tmp, a_0);
-        ab_0 = vaddq_f32(tmp, ab_0);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_1);
-        ab_1 = vaddq_f32(tmp, ab_1);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_2);
-        ab_2 = vaddq_f32(tmp, ab_2);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_3);
-        ab_3 = vaddq_f32(tmp, ab_3);
-
-        A += 4;
-        B += 4;
-
-        //3
-        a_0 = vld1q_dup_f32(A);
-        a_1 = vld1q_dup_f32(A+1);
-        a_2 = vld1q_dup_f32(A+2);
-        a_3 = vld1q_dup_f32(A+3);
-
-        b = vld1q_f32(B);
-
-        tmp = b;
-
-        tmp = vmulq_f32(tmp, a_0);
-        ab_0 = vaddq_f32(tmp, ab_0);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_1);
-        ab_1 = vaddq_f32(tmp, ab_1);
-        
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_2);
-        ab_2 = vaddq_f32(tmp, ab_2);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_3);
-        ab_3 = vaddq_f32(tmp, ab_3);
-
-        A += 4;
-        B += 4;
-
-        //4
-        a_0 = vld1q_dup_f32(A);
-        a_1 = vld1q_dup_f32(A+1);
-        a_2 = vld1q_dup_f32(A+2);
-        a_3 = vld1q_dup_f32(A+3);
-
-        b = vld1q_f32(B);
-
-        tmp = b;
-
-        tmp = vmulq_f32(tmp, a_0);
-        ab_0 = vaddq_f32(tmp, ab_0);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_1);
-        ab_1 = vaddq_f32(tmp, ab_1);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_2);
-        ab_2 = vaddq_f32(tmp, ab_2);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_3);
-        ab_3 = vaddq_f32(tmp, ab_3);
+        btmp0 = vld1_f32(B+4); // load in advance
+        btmp1 = vld1_f32(B+6);
 
         A += 4;
         B += 4;
     }
 
-    for (k=0; k<KC%4; k++){
-        a_0 = vld1q_dup_f32(A);
-        a_1 = vld1q_dup_f32(A+1);
-        a_2 = vld1q_dup_f32(A+2);
-        a_3 = vld1q_dup_f32(A+3);
+    AB[0] = vget_lane_f32(ab_00_11, 0);
+    AB[1] = vget_lane_f32(ab_01_10, 1);
+    AB[2] = vget_lane_f32(ab_02_13, 0);
+    AB[3] = vget_lane_f32(ab_03_12, 1);
+    AB[4] = vget_lane_f32(ab_01_10, 0);
+    AB[5] = vget_lane_f32(ab_00_11, 1);
+    AB[6] = vget_lane_f32(ab_03_12, 0);
+    AB[7] = vget_lane_f32(ab_02_13, 1);
+    AB[8] = vget_lane_f32(ab_20_31, 0);
+    AB[9] = vget_lane_f32(ab_21_30, 1);
+    AB[10] = vget_lane_f32(ab_22_33, 0);
+    AB[11] = vget_lane_f32(ab_23_32, 1);
+    AB[12] = vget_lane_f32(ab_21_30, 0);
+    AB[13] = vget_lane_f32(ab_20_31, 1);
+    AB[14] = vget_lane_f32(ab_23_32, 0);
+    AB[15] = vget_lane_f32(ab_22_33, 1);
 
-        b = vld1q_f32(B);
-
-        tmp = b;
-
-        tmp = vmulq_f32(tmp, a_0);
-        ab_0 = vaddq_f32(tmp, ab_0);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_1);
-        ab_1 = vaddq_f32(tmp, ab_1);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_2);
-        ab_2 = vaddq_f32(tmp, ab_2);
-
-        tmp = b;
-        tmp = vmulq_f32(tmp, a_3);
-        ab_3 = vaddq_f32(tmp, ab_3);
-
-        A += 4;
-        B += 4;
-    }
-
-    vst1q_f32(AB, ab_0);
-    vst1q_f32(AB+4, ab_1);
-    vst1q_f32(AB+8, ab_2);
-    vst1q_f32(AB+12, ab_3);
 
     if(beta == 1){
         for(i=0; i<MR; i++){
