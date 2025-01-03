@@ -9,8 +9,8 @@
 #define NR 4
 
 /* buffer */
-float _A[MC*KC] __attribute__ ((aligned (8)));
-float _B[KC*NC] __attribute__ ((aligned (8)));
+float _A[MC*KC] __attribute__ ((aligned (16)));
+float _B[KC*NC] __attribute__ ((aligned (16)));
 
 
 void pack_MRxKC(int incRowA, int incColA, float* A, float* _A){
@@ -54,82 +54,60 @@ void pack_B(int incRowB, int incColB, float* B, float* _B){
 
 void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float alpha, float beta){
 
-    float AB[MR*NR] __attribute__ ((aligned (8))) = {0};
+    float AB[MR*NR] __attribute__ ((aligned (16))) = {0};
     int i, j, k;
 
-    float32x2_t ab_00_11, ab_01_10, ab_02_13, ab_03_12, ab_20_31, ab_21_30, ab_22_33, ab_23_32;
-    float32x2_t btmp0, btmp1, atmp0, atmp1;
-    float32x2_t atmp0_r, atmp1_r, temp;
+    float32x4_t ab_00, ab_30, ab_20, ab_10;
+    float32x4_t atmp0, atmp3, atmp2, atmp1, btmp;
 
-    btmp0 = vld1_f32(B);
-    btmp1 = vld1_f32(B+2);
-    atmp0 = vld1_f32(A);
+    btmp = vld1q_f32(B);
+    atmp0 = vld1q_f32(A);
 
-    ab_00_11 = vdup_n_f32(0.0f);
-    ab_01_10 = vdup_n_f32(0.0f);
-    ab_02_13 = vdup_n_f32(0.0f);
-    ab_03_12 = vdup_n_f32(0.0f);    
-    ab_20_31 = vdup_n_f32(0.0f);
-    ab_21_30 = vdup_n_f32(0.0f);
-    ab_22_33 = vdup_n_f32(0.0f);
-    ab_23_32 = vdup_n_f32(0.0f);
+    ab_00 = vdupq_n_f32(0.0f);
+    ab_30 = vdupq_n_f32(0.0f);
+    ab_20 = vdupq_n_f32(0.0f);
+    ab_10 = vdupq_n_f32(0.0f);    
     
-
     for (k=0; k<KC; k++){
-        atmp1 = vld1_f32(A+2);
+        atmp3 = vextq_f32(atmp0, atmp0, 3);
+        atmp2 = vextq_f32(atmp0, atmp0, 2);
+        atmp1 = vextq_f32(atmp0, atmp0, 1);
 
-        atmp0_r = vrev64_f32(atmp0);
-        atmp1_r = vrev64_f32(atmp1);
+        atmp0 = vmulq_f32(atmp0, btmp);
+        ab_00 = vaddq_f32(ab_00, atmp0);
 
-        temp = atmp0;
-        atmp0 = vmul_f32(atmp0, btmp0);
-        temp = vmul_f32(temp, btmp1);
-        ab_00_11 = vadd_f32(ab_00_11, atmp0);
-        ab_02_13 = vadd_f32(ab_02_13, temp);
+        atmp0 = vld1q_f32(A+4); // load in advance
 
-        temp = atmp0_r;
-        atmp0_r = vmul_f32(atmp0_r, btmp0);
-        temp = vmul_f32(temp, btmp1);
-        ab_01_10 = vadd_f32(ab_01_10, atmp0_r);
-        ab_03_12 = vadd_f32(ab_03_12, temp);
+        atmp3 = vmulq_f32(atmp3, btmp);
+        ab_30 = vaddq_f32(ab_30, atmp3);
 
-        atmp0 = vld1_f32(A+4); // load in advance
+        atmp2 = vmulq_f32(atmp2, btmp);
+        ab_20 = vaddq_f32(ab_20, atmp2);
 
-        temp = atmp1;
-        atmp1 = vmul_f32(atmp1, btmp0);
-        temp = vmul_f32(temp, btmp1);
-        ab_20_31 = vadd_f32(ab_20_31, atmp1);
-        ab_22_33 = vadd_f32(ab_22_33, temp);
-
-        temp = atmp1_r;
-        atmp1_r = vmul_f32(atmp1_r, btmp0);
-        temp = vmul_f32(temp, btmp1);
-        ab_21_30 = vadd_f32(ab_21_30, atmp1_r);
-        ab_23_32 = vadd_f32(ab_23_32, temp);
-
-        btmp0 = vld1_f32(B+4); // load in advance
-        btmp1 = vld1_f32(B+6);
+        atmp1 = vmulq_f32(atmp1, btmp);
+        btmp = vld1q_f32(B+4); // load in advance
+        ab_10 = vaddq_f32(ab_10, atmp1);
 
         A += 4;
         B += 4;
     }
 
-    AB[0] = vget_lane_f32(ab_00_11, 0);
-    AB[1] = vget_lane_f32(ab_01_10, 1);
-    AB[2] = vget_lane_f32(ab_02_13, 0);
-    AB[3] = vget_lane_f32(ab_03_12, 1);
-    AB[4] = vget_lane_f32(ab_01_10, 0);
-    AB[5] = vget_lane_f32(ab_00_11, 1);
-    AB[6] = vget_lane_f32(ab_03_12, 0);
-    AB[7] = vget_lane_f32(ab_02_13, 1);
-    AB[8] = vget_lane_f32(ab_20_31, 0);
-    AB[9] = vget_lane_f32(ab_21_30, 1);
-    AB[10] = vget_lane_f32(ab_22_33, 0);
-    AB[11] = vget_lane_f32(ab_23_32, 1);
-    AB[12] = vget_lane_f32(ab_21_30, 0);
-    AB[13] = vget_lane_f32(ab_20_31, 1);
-    AB[14] = vget_lane_f32(ab_23_32, 0);
-    AB[15] = vget_lane_f32(ab_22_33, 1);
+    AB[0] = vgetq_lane_f32(ab_00, 0);
+    AB[1] = vgetq_lane_f32(ab_30, 1);
+    AB[2] = vgetq_lane_f32(ab_20, 2);
+    AB[3] = vgetq_lane_f32(ab_10, 3);
+    AB[4] = vgetq_lane_f32(ab_10, 0);
+    AB[5] = vgetq_lane_f32(ab_00, 1);
+    AB[6] = vgetq_lane_f32(ab_30, 2);
+    AB[7] = vgetq_lane_f32(ab_20, 3);
+    AB[8] = vgetq_lane_f32(ab_20, 0);
+    AB[9] = vgetq_lane_f32(ab_10, 1);
+    AB[10] = vgetq_lane_f32(ab_00, 2);
+    AB[11] = vgetq_lane_f32(ab_30, 3);
+    AB[12] = vgetq_lane_f32(ab_30, 0);
+    AB[13] = vgetq_lane_f32(ab_20, 1);
+    AB[14] = vgetq_lane_f32(ab_10, 2);
+    AB[15] = vgetq_lane_f32(ab_00, 3);
 
 
     if(beta == 1){
