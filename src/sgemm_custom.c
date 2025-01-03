@@ -92,22 +92,22 @@ void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float 
         B += 4;
     }
 
-    AB[0] = vgetq_lane_f32(ab_00, 0);
-    AB[1] = vgetq_lane_f32(ab_30, 1);
-    AB[2] = vgetq_lane_f32(ab_20, 2);
-    AB[3] = vgetq_lane_f32(ab_10, 3);
-    AB[4] = vgetq_lane_f32(ab_10, 0);
-    AB[5] = vgetq_lane_f32(ab_00, 1);
-    AB[6] = vgetq_lane_f32(ab_30, 2);
-    AB[7] = vgetq_lane_f32(ab_20, 3);
-    AB[8] = vgetq_lane_f32(ab_20, 0);
-    AB[9] = vgetq_lane_f32(ab_10, 1);
-    AB[10] = vgetq_lane_f32(ab_00, 2);
-    AB[11] = vgetq_lane_f32(ab_30, 3);
-    AB[12] = vgetq_lane_f32(ab_30, 0);
-    AB[13] = vgetq_lane_f32(ab_20, 1);
-    AB[14] = vgetq_lane_f32(ab_10, 2);
-    AB[15] = vgetq_lane_f32(ab_00, 3);
+    vst1q_lane_f32(AB, ab_00, 0);
+    vst1q_lane_f32(AB+1, ab_30, 1);
+    vst1q_lane_f32(AB+2, ab_20, 2);
+    vst1q_lane_f32(AB+3, ab_10, 3);
+    vst1q_lane_f32(AB+4, ab_10, 0);
+    vst1q_lane_f32(AB+5, ab_00, 1);
+    vst1q_lane_f32(AB+6, ab_30, 2);
+    vst1q_lane_f32(AB+7, ab_20, 3);
+    vst1q_lane_f32(AB+8, ab_20, 0);
+    vst1q_lane_f32(AB+9, ab_10, 1);
+    vst1q_lane_f32(AB+10, ab_00, 2);
+    vst1q_lane_f32(AB+11, ab_30, 3);
+    vst1q_lane_f32(AB+12, ab_30, 0);
+    vst1q_lane_f32(AB+13, ab_20, 1);
+    vst1q_lane_f32(AB+14, ab_10, 2);
+    vst1q_lane_f32(AB+15, ab_00, 3);
 
 
     if(beta == 1){
