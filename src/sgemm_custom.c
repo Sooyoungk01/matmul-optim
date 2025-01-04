@@ -3,7 +3,7 @@
 
 #define MC 256
 #define NC 256
-#define KC 256
+#define KC 1024
 
 #define MR 4
 #define NR 4
@@ -57,13 +57,15 @@ void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float 
     float _AB[MR*NR] __attribute__ ((aligned (16))) = {0};
     float* AB = (float *)__builtin_assume_aligned(_AB, 16);
     int i, j;
-    int k = KC;
+    int k = KC/4;
+    int kr = KC%4;
 
     __asm__ volatile (
         "ldr    x0, %[A]  \n\t"   // load A into x0
         "ldr    x1, %[B] \n\t"   // load B into x1
         "ldr    x2, %[AB]  \n\t" // load AB into x2
         "mov    x3, %[k]    \n\t" 
+        "mov    x4, %[kr]   \n\t"
         "ld1    {v0.4s}, [x1] \n\t" // btmp = vld1q_f32(B);
         "ld1    {v1.4s}, [x0] \n\t" // atmp0 = vld1q_f32(A);
         "eor    v10.16b, v10.16b, v10.16b \n\t" // ab_00 = vdupq_n_f32(0.0f);
@@ -72,66 +74,116 @@ void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float 
         "eor    v13.16b, v13.16b, v13.16b \n\t" // ab_10 = vdupq_n_f32(0.0f);
         "                                 \n\t"
             ".DLOOP%=:          \n\t"
-            "                   \n\t"
+            "                   \n\t"                                                                           // update 1
             "ext    v2.16b, v1.16b, v1.16b, 12  \n\t" // atmp3 = vextq_f32(atmp0, atmp0, 3);
             "ext    v3.16b, v1.16b, v1.16b, 8   \n\t" // atmp2 = vextq_f32(atmp0, atmp0, 2);
             "ext    v4.16b, v1.16b, v1.16b, 4   \n\t" // atmp1 = vextq_f32(atmp0, atmp0, 1);
             "                                   \n\t"
             "fmla   v10.4s, v1.4s,  v0.4s       \n\t" // atmp0 = vmulq_f32(atmp0, btmp); ab_00 = vaddq_f32(ab_00, atmp0);
             "                                   \n\t"
-            "add    x0, x0, 16                  \n\t" // A += 4;
-            "ld1    {v1.4s}, [x0]               \n\t" // atmp0 = vld1q_f32(A+4);
+            "add    x0, x0, 16                  \n\t"
+            "ld1    {v1.4s}, [x0], 16           \n\t" // atmp0 = vld1q_f32(A+4); A +=4;
             "                                   \n\t"
             "fmla   v11.4s, v2.4s, v0.4s        \n\t" // atmp3 = vmulq_f32(atmp3, btmp); ab_30 = vaddq_f32(ab_30, atmp3);
-            "fmla   v12.4s, v3.4s, v0.4s       \n\t"
+            "fmla   v12.4s, v3.4s, v0.4s        \n\t"
+            "fmla   v13.4s, v4.4s,  v0.4s       \n\t"
+            "                                   \n\t"
+            "add    x1, x1, 16                  \n\t"
+            "ld1    {v0.4s}, [x1], 16           \n\t" // btmp = vld1q_f32(B+4); B += 4; 
+            "                                   \n\t"                                                           // update 2
+            "ext    v2.16b, v1.16b, v1.16b, 12  \n\t" // atmp3 = vextq_f32(atmp0, atmp0, 3);
+            "ext    v3.16b, v1.16b, v1.16b, 8   \n\t" // atmp2 = vextq_f32(atmp0, atmp0, 2);
+            "ext    v4.16b, v1.16b, v1.16b, 4   \n\t" // atmp1 = vextq_f32(atmp0, atmp0, 1);
+            "                                   \n\t"
+            "fmla   v10.4s, v1.4s,  v0.4s       \n\t" // atmp0 = vmulq_f32(atmp0, btmp); ab_00 = vaddq_f32(ab_00, atmp0);
+            "                                   \n\t"
+            "ld1    {v1.4s}, [x0], 16           \n\t" // atmp0 = vld1q_f32(A); A +=4;
+            "                                   \n\t"
+            "fmla   v11.4s, v2.4s, v0.4s        \n\t" // atmp3 = vmulq_f32(atmp3, btmp); ab_30 = vaddq_f32(ab_30, atmp3);
+            "fmla   v12.4s, v3.4s, v0.4s        \n\t"
+            "fmla   v13.4s, v4.4s,  v0.4s       \n\t"
+            "                                   \n\t"
+            "ld1    {v0.4s}, [x1], 16           \n\t" // btmp = vld1q_f32(B); B += 4;
+            "                                   \n\t"                                                           // update 3
+            "ext    v2.16b, v1.16b, v1.16b, 12  \n\t" // atmp3 = vextq_f32(atmp0, atmp0, 3);
+            "ext    v3.16b, v1.16b, v1.16b, 8   \n\t" // atmp2 = vextq_f32(atmp0, atmp0, 2);
+            "ext    v4.16b, v1.16b, v1.16b, 4   \n\t" // atmp1 = vextq_f32(atmp0, atmp0, 1);
+            "                                   \n\t"
+            "fmla   v10.4s, v1.4s,  v0.4s       \n\t" // atmp0 = vmulq_f32(atmp0, btmp); ab_00 = vaddq_f32(ab_00, atmp0);
+            "                                   \n\t"
+            "ld1    {v1.4s}, [x0], 16           \n\t" // atmp0 = vld1q_f32(A); A +=4; 
+            "                                   \n\t"
+            "fmla   v11.4s, v2.4s, v0.4s        \n\t" // atmp3 = vmulq_f32(atmp3, btmp); ab_30 = vaddq_f32(ab_30, atmp3);
+            "fmla   v12.4s, v3.4s, v0.4s        \n\t"
+            "fmla   v13.4s, v4.4s,  v0.4s       \n\t"
+            "                                   \n\t"
+            "ld1    {v0.4s}, [x1], 16           \n\t" // btmp = vld1q_f32(B); B += 4;
+            "                                   \n\t"                                                           // update 4
+            "ext    v2.16b, v1.16b, v1.16b, 12  \n\t" // atmp3 = vextq_f32(atmp0, atmp0, 3);
+            "ext    v3.16b, v1.16b, v1.16b, 8   \n\t" // atmp2 = vextq_f32(atmp0, atmp0, 2);
+            "ext    v4.16b, v1.16b, v1.16b, 4   \n\t" // atmp1 = vextq_f32(atmp0, atmp0, 1);
+            "                                   \n\t"
+            "fmla   v10.4s, v1.4s,  v0.4s       \n\t" // atmp0 = vmulq_f32(atmp0, btmp); ab_00 = vaddq_f32(ab_00, atmp0);
+            "                                   \n\t"
+            "ld1    {v1.4s}, [x0]               \n\t" // atmp0 = vld1q_f32(A); A +=4;
+            "                                   \n\t"
+            "fmla   v11.4s, v2.4s, v0.4s        \n\t" // atmp3 = vmulq_f32(atmp3, btmp); ab_30 = vaddq_f32(ab_30, atmp3);
+            "fmla   v12.4s, v3.4s, v0.4s        \n\t"
+            "fmla   v13.4s, v4.4s,  v0.4s       \n\t"
+            "                                   \n\t"
+            "ld1    {v0.4s}, [x1]               \n\t" // btmp = vld1q_f32(B); B += 4;
+            "                                   \n\t"
+            "subs   x3,  x3,    1               \n\t" // k--
+            "bne    .DLOOP%=                    \n\t"
+            "                                   \n\t"
+            "cbz    x4, .DLOOPWRITE%=           \n\t"
+            ".DLOOPKR%=:        \n\t"
+            "                   \n\t"                                                                           // update kr
+            "ext    v2.16b, v1.16b, v1.16b, 12  \n\t" // atmp3 = vextq_f32(atmp0, atmp0, 3);
+            "ext    v3.16b, v1.16b, v1.16b, 8   \n\t" // atmp2 = vextq_f32(atmp0, atmp0, 2);
+            "ext    v4.16b, v1.16b, v1.16b, 4   \n\t" // atmp1 = vextq_f32(atmp0, atmp0, 1);
+            "                                   \n\t"
+            "fmla   v10.4s, v1.4s,  v0.4s       \n\t" // atmp0 = vmulq_f32(atmp0, btmp); ab_00 = vaddq_f32(ab_00, atmp0);
+            "                                   \n\t"
+            "add    x0, x0, 16                  \n\t" // A +=4;
+            "ld1    {v1.4s}, [x0]               \n\t" // atmp0 = vld1q_f32(A); 
+            "                                   \n\t"
+            "fmla   v11.4s, v2.4s, v0.4s        \n\t" // atmp3 = vmulq_f32(atmp3, btmp); ab_30 = vaddq_f32(ab_30, atmp3);
+            "fmla   v12.4s, v3.4s, v0.4s        \n\t"
             "fmla   v13.4s, v4.4s,  v0.4s       \n\t"
             "                                   \n\t"
             "add    x1, x1, 16                  \n\t" // B += 4;
             "ld1    {v0.4s}, [x1]               \n\t" // btmp = vld1q_f32(B);
             "                                   \n\t"
-            "subs   x3,  x3,    1               \n\t" // k--
-            "bne    .DLOOP%=                    \n\t"
-            "                                   \n\t"
-        "st1    {v10.s}[0], [x2]        \n\t" // vst1q_lane(AB[0], ab_00, 0);
-        "add    x2, x2, 4              \n\t"
-        "st1    {v11.s}[1], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v12.s}[2], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v13.s}[3], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v13.s}[0], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v10.s}[1], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v11.s}[2], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v12.s}[3], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v12.s}[0], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v13.s}[1], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v10.s}[2], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v11.s}[3], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v11.s}[0], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v12.s}[1], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v13.s}[2], [x2]        \n\t"
-        "add    x2, x2, 4              \n\t"
-        "st1    {v10.s}[3], [x2]        \n\t"
+            "subs   x4,  x4,    1               \n\t" // kr--
+            "bne    .DLOOPKR%=                  \n\t"
+        ".DLOOPWRITE%=:                  \n\t"
+        "st1    {v10.s}[0], [x2],   4    \n\t" // vst1q_lane(AB[0], ab_00, 0);
+        "st1    {v11.s}[1], [x2],   4    \n\t"
+        "st1    {v12.s}[2], [x2],   4    \n\t"
+        "st1    {v13.s}[3], [x2],   4    \n\t"
+        "st1    {v13.s}[0], [x2],   4    \n\t"
+        "st1    {v10.s}[1], [x2],   4    \n\t"
+        "st1    {v11.s}[2], [x2],   4    \n\t"
+        "st1    {v12.s}[3], [x2],   4    \n\t"
+        "st1    {v12.s}[0], [x2],   4    \n\t"
+        "st1    {v13.s}[1], [x2],   4    \n\t"
+        "st1    {v10.s}[2], [x2],   4    \n\t"
+        "st1    {v11.s}[3], [x2],   4    \n\t"
+        "st1    {v11.s}[0], [x2],   4    \n\t"
+        "st1    {v12.s}[1], [x2],   4    \n\t"
+        "st1    {v13.s}[2], [x2],   4    \n\t"
+        "st1    {v10.s}[3], [x2]         \n\t"
         : // output
         : // input
             [A ]"m" (A),      // 0
             [B] "m" (B),      // 1
             [AB] "m" (AB),     // 2
-            [k] "r" (k)       // 3
+            [k] "r" (k),       // 3
+            [kr] "r" (kr)
         : // register clobber list
             "memory", "x0", "x1", "x2", "x3",
-            "v0", "v1", "v2", "v3", "v4",
+            "x4", "v0", "v1", "v2", "v3", "v4",
             "v10", "v11", "v12", "v13"
     );
 
