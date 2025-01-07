@@ -53,17 +53,12 @@ void pack_B(int incRowB, int incColB, float* B, float* _B){
 }
 
 void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float alpha, float beta){
-
-    float _AB[MR*NR] __attribute__ ((aligned (16))) = {0};
-    float* AB = (float *)__builtin_assume_aligned(_AB, 16);
-    int i, j;
     int k = KC/4;
     int kr = KC%4;
 
     __asm__ volatile (
         "ldr    x0, %[A]  \n\t"   // load A into x0
         "ldr    x1, %[B] \n\t"   // load B into x1
-        "ldr    x2, %[AB]  \n\t" // load AB into x2
         "mov    x3, %[k]    \n\t" 
         "mov    x4, %[kr]   \n\t"
         "ld1    {v0.4s}, [x1] \n\t" // btmp = vld1q_f32(B);
@@ -158,50 +153,69 @@ void micro_kernel(float *A, float *B, int incRowC, int incColC, float* C, float 
             "subs   x4,  x4,    1               \n\t" // kr--
             "bne    .DLOOPKR%=                  \n\t"
         ".DLOOPWRITE%=:                  \n\t"
-        "st1    {v10.s}[0], [x2],   4    \n\t" // vst1q_lane(AB[0], ab_00, 0);
-        "st1    {v11.s}[1], [x2],   4    \n\t"
-        "st1    {v12.s}[2], [x2],   4    \n\t"
-        "st1    {v13.s}[3], [x2],   4    \n\t"
-        "st1    {v13.s}[0], [x2],   4    \n\t"
-        "st1    {v10.s}[1], [x2],   4    \n\t"
-        "st1    {v11.s}[2], [x2],   4    \n\t"
-        "st1    {v12.s}[3], [x2],   4    \n\t"
-        "st1    {v12.s}[0], [x2],   4    \n\t"
-        "st1    {v13.s}[1], [x2],   4    \n\t"
-        "st1    {v10.s}[2], [x2],   4    \n\t"
-        "st1    {v11.s}[3], [x2],   4    \n\t"
-        "st1    {v11.s}[0], [x2],   4    \n\t"
-        "st1    {v12.s}[1], [x2],   4    \n\t"
-        "st1    {v13.s}[2], [x2],   4    \n\t"
-        "st1    {v10.s}[3], [x2]         \n\t"
+        "ldr    x2, %[C]  \n\t" // load C into x2
+        "mov    w3, %w[alpha]    \n\t" 
+        "mov    w4, %w[beta]   \n\t"
+        "mov    x0, %[incRowC]    \n\t" 
+        // float byte 만큼 곱해줘야함.
+        "dup    v0.4s,  w3      \n\t" // duplicated alpha
+        "dup    v1.4s,  w4      \n\t" // duplicated beta
+
+        "ld1    {v2.4s},    [x2]        \n\t"
+        "ins    v4.s[0],    v10.s[0]    \n\t"
+        "ins    v4.s[1],    v11.s[1]    \n\t"
+        "ins    v4.s[2],    v12.s[2]    \n\t"
+        "ins    v4.s[3],    v13.s[3]    \n\t"
+        "mul    v2.4s,  v2.4s, v1.4s    \n\t"
+        "fmla   v2.4s,  v4.4s, v0.4s    \n\t"
+        "st1    {v2.4s},    [x2]        \n\t"
+
+        "mov    x0,     x0,     lsl 2       \n\t"
+        "add    x2,     x2,     x0      \n\t"
+        
+        "ins    v4.s[0],    v13.s[0]    \n\t"
+        "ins    v4.s[1],    v10.s[1]    \n\t"
+        "ins    v4.s[2],    v11.s[2]    \n\t"
+        "ld1    {v2.4s},    [x2]        \n\t"
+        "ins    v4.s[3],    v12.s[3]    \n\t"
+        "mul    v2.4s,  v2.4s, v1.4s    \n\t"
+        "fmla   v2.4s,  v4.4s, v0.4s    \n\t"
+        "st1    {v2.4s},    [x2],   x0  \n\t"
+        
+        "ins    v4.s[0],    v12.s[0]    \n\t"
+        "ins    v4.s[1],    v13.s[1]    \n\t"
+        "ins    v4.s[2],    v10.s[2]    \n\t"
+        "ld1    {v2.4s},    [x2]        \n\t"
+        "ins    v4.s[3],    v11.s[3]    \n\t"
+        "mul    v2.4s,  v2.4s, v1.4s    \n\t"
+        "fmla   v2.4s,  v4.4s, v0.4s    \n\t"
+        "st1    {v2.4s},    [x2],   x0  \n\t"
+        
+        "ins    v4.s[0],    v11.s[0]    \n\t"
+        "ins    v4.s[1],    v12.s[1]    \n\t"
+        "ins    v4.s[2],    v13.s[2]    \n\t"
+        "ld1    {v2.4s},    [x2]        \n\t"
+        "ins    v4.s[3],    v10.s[3]    \n\t"
+        "mul    v2.4s,  v2.4s, v1.4s    \n\t"
+        "fmla   v2.4s,  v4.4s, v0.4s    \n\t"
+        "st1    {v2.4s},    [x2]        \n\t"
+
+
         : // output
         : // input
             [A ]"m" (A),      // 0
             [B] "m" (B),      // 1
-            [AB] "m" (AB),     // 2
+            [C] "m" (C),     // 2
             [k] "r" (k),       // 3
-            [kr] "r" (kr)
+            [kr] "r" (kr),      // 4
+            [alpha] "r" (alpha),    // 3
+            [beta]  "r" (beta),      // 4
+            [incRowC]   "r" (incRowC)  // 0
         : // register clobber list
             "memory", "x0", "x1", "x2", "x3",
             "x4", "v0", "v1", "v2", "v3", "v4",
-            "v10", "v11", "v12", "v13"
+            "v10", "v11", "v12", "v13", "w3", "w4"
     );
-
-
-    if(beta == 1){
-        for(i=0; i<MR; i++){
-            for(j=0; j<NR; j++){
-                C[i*incRowC + j] += AB[i*NR+j]*alpha;
-            }
-        }
-    }else{
-        for(i=0; i<MR; i++){
-            for(j=0; j<NR; j++){
-                C[i*incRowC + j] *= beta;
-                C[i*incRowC + j] += AB[i*NR+j]*alpha;
-            }
-        }
-    }
 }
 
 void macro_kernel(int incRowC, int incColC, float* C, float alpha, float beta){
